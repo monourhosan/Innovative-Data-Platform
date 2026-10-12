@@ -1,0 +1,155 @@
+// Prisma Schema for Innovative Data Platform (Saif)
+// Supabase & PostgreSQL Production Architecture
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  supervisor
+  team_member
+}
+
+enum UserStatus {
+  active
+  inactive
+  suspended
+}
+
+enum ProjectStatus {
+  active
+  planning
+  completed
+  archived
+}
+
+enum SyncStatus {
+  synced
+  pending
+  failed
+}
+
+enum SubmissionStatus {
+  verified
+  pending
+  flagged
+  rejected
+}
+
+model User {
+  id            String       @id @default(uuid())
+  name          String
+  email         String       @unique
+  phone         String
+  username      String       @unique
+  password_hash String
+  role          UserRole     @default(team_member)
+  status        UserStatus   @default(active)
+  created_at    DateTime     @default(now())
+  updated_at    DateTime     @updatedAt
+
+  supervisors   Supervisor[] @relation("SupervisorUser")
+  created_supervisors Supervisor[] @relation("CreatedSupervisors")
+  team_members  TeamMember[] @relation("TeamMemberUser")
+  created_projects Project[] @relation("CreatedProjects")
+
+  @@map("users")
+}
+
+model Project {
+  id           String        @id @default(uuid())
+  project_name String
+  description  String
+  created_by   String
+  status       ProjectStatus @default(active)
+  start_date   DateTime
+  end_date     DateTime
+  created_at   DateTime      @default(now())
+
+  creator      User          @relation("CreatedProjects", fields: [created_by], references: [id])
+  forms        SurveyForm[]
+  supervisors  Supervisor[]
+  submissions  DataSubmission[]
+
+  @@map("projects")
+}
+
+model SurveyForm {
+  id             String           @id @default(uuid())
+  project_id     String
+  form_title     String
+  form_id        String
+  version        String
+  uploaded_file  String
+  form_structure Json
+  created_at     DateTime         @default(now())
+
+  project        Project          @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  submissions    DataSubmission[]
+
+  @@map("survey_forms")
+}
+
+model Supervisor {
+  id               String           @id @default(uuid())
+  user_id          String
+  assigned_project String
+  created_by       String
+
+  user             User             @relation("SupervisorUser", fields: [user_id], references: [id], onDelete: Cascade)
+  creator          User             @relation("CreatedSupervisors", fields: [created_by], references: [id])
+  project          Project          @relation(fields: [assigned_project], references: [id], onDelete: Cascade)
+  team_members     TeamMember[]
+  submissions      DataSubmission[]
+
+  @@map("supervisors")
+}
+
+model TeamMember {
+  id            String           @id @default(uuid())
+  supervisor_id String
+  user_id       String
+
+  user          User             @relation("TeamMemberUser", fields: [user_id], references: [id], onDelete: Cascade)
+  supervisor    Supervisor       @relation(fields: [supervisor_id], references: [id], onDelete: Cascade)
+  submissions   DataSubmission[]
+
+  @@map("team_members")
+}
+
+model DataSubmission {
+  id             String           @id @default(uuid())
+  project_id     String
+  form_id        String
+  supervisor_id  String
+  team_member_id String
+  form_data      Json
+  gps_location   Json
+  submitted_time DateTime         @default(now())
+  sync_status    SyncStatus       @default(synced)
+  status         SubmissionStatus @default(verified)
+
+  project        Project          @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  form           SurveyForm       @relation(fields: [form_id], references: [id], onDelete: Cascade)
+  supervisor     Supervisor       @relation(fields: [supervisor_id], references: [id], onDelete: Cascade)
+  team_member    TeamMember       @relation(fields: [team_member_id], references: [id], onDelete: Cascade)
+
+  @@map("data_submissions")
+}
+
+model SystemActivity {
+  id          String   @id @default(uuid())
+  type        String
+  title       String
+  description String
+  actor_name  String
+  timestamp   DateTime @default(now())
+
+  @@map("system_activities")
+}
